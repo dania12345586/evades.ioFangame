@@ -69,9 +69,11 @@ let HeroClass = Scutum;
 let currentMapIndex = 0;
 let isTransitioning = false;
 
+// === МУЛЬТИПЛЕЕРНЫЕ ПЕРЕМЕННЫЕ ===
 let myPlayerId = null;
-let myRoomId = null;
+let myRoomId = '00000000-0000-0000-0000-000000000001'; // фиксированная комната
 let otherPlayers = {};
+let multiplayerChannel = null;
 
 const maps = [
     { name: 'Chaos Core', class: BasicCoreMap },
@@ -102,6 +104,7 @@ function startGameWithHero(heroClass, mapIndex = 0) {
     isWin = false;
     isTransitioning = false;
 
+    // === ИНИЦИАЛИЗАЦИЯ МУЛЬТИПЛЕЕРА ===
     initMultiplayer(heroClass.name);
 
     if (window.__animId) {
@@ -113,20 +116,40 @@ function startGameWithHero(heroClass, mapIndex = 0) {
 
 async function initMultiplayer(heroName) {
     try {
-        const playerData = await createPlayer('Player', heroName);
+        // Проверяем, залогинен ли пользователь
+        const session = await getSession();
+        let userId = null;
+        if (session && session.user) {
+            userId = session.user.id;
+        }
+
+        // Создаём или получаем игрока
+        let playerData;
+        if (userId) {
+            // Ищем существующего игрока с этим user_id
+            const existing = await getPlayerByUserId(userId);
+            if (existing) {
+                playerData = existing;
+            } else {
+                // Создаём нового игрока с user_id в качестве id
+                playerData = await createPlayer(heroName, heroName, userId);
+            }
+        } else {
+            // Без авторизации – создаём анонимного игрока
+            playerData = await createPlayer('Player', heroName);
+        }
         myPlayerId = playerData.id;
         console.log('Player created:', myPlayerId);
 
-        const roomId = '00000000-0000-0000-0000-000000000001';
-        // Используем getOrCreateRoom для гарантии существования комнаты
-        const room = await getOrCreateRoom(roomId, 'Main Server', 8);
-        myRoomId = room.id;
-        console.log('Room ready:', myRoomId);
-
+        // Присоединяемся к комнате
         await joinRoom(myPlayerId, myRoomId);
-        console.log('Joined room');
+        console.log('Joined room:', myRoomId);
 
-        subscribeToRoom(myRoomId, myPlayerId, (id, x, y, hp, isAlive) => {
+        // Подписываемся на обновления других игроков
+        if (multiplayerChannel) {
+            multiplayerChannel.unsubscribe();
+        }
+        multiplayerChannel = subscribeToRoom(myRoomId, myPlayerId, (id, x, y, hp, isAlive) => {
             if (!otherPlayers[id]) {
                 otherPlayers[id] = { x, y, hp, isAlive, targetX: x, targetY: y };
             } else {
@@ -136,6 +159,14 @@ async function initMultiplayer(heroName) {
                 otherPlayers[id].isAlive = isAlive;
             }
         });
+
+        // При закрытии вкладки – покидаем комнату
+        window.addEventListener('beforeunload', () => {
+            if (myPlayerId && myRoomId) {
+                leaveRoom(myPlayerId, myRoomId);
+            }
+        });
+
     } catch (error) {
         console.error('Multiplayer init error:', error);
     }
@@ -170,6 +201,7 @@ function switchMap(newMapIndex) {
     newPlayer.isDead = player.isDead;
     newPlayer.respawnTimer = player.respawnTimer;
     newPlayer.godMode = player.godMode;
+    // Копируем специфичные поля
     if (player.mines) newPlayer.mines = player.mines.slice();
     if (player.activeRocket) newPlayer.activeRocket = player.activeRocket;
     if (player.teslaStation !== undefined) {
@@ -267,7 +299,7 @@ function gameLoop() {
     level.update();
     manager.update();
 
-    // Синхронизация позиции
+    // === СИНХРОНИЗАЦИЯ ПОЗИЦИИ С SUPABASE ===
     if (myPlayerId && player.alive) {
         syncPosition(myPlayerId, player.x, player.y, 100, player.energy, player.alive);
     }
@@ -385,9 +417,10 @@ function render() {
     player.draw(ctx, SCALE);
     if (player.drawEffects) player.drawEffects(ctx, SCALE);
 
-    // Рисуем других игроков
+    // === РИСУЕМ ДРУГИХ ИГРОКОВ ===
     for (const id in otherPlayers) {
         const p = otherPlayers[id];
+        // Интерполяция
         if (p.targetX !== undefined) {
             p.x += (p.targetX - p.x) * 0.15;
             p.y += (p.targetY - p.y) * 0.15;
@@ -412,7 +445,7 @@ function render() {
         ctx.globalAlpha = 1;
     }
 
-    // Порталы (без изменений)
+    // === Порталы ===
     if (currentMapIndex === 0 && level.levelNumber === 1) {
         const portalX = offsetX;
         const portalY = offsetY;
