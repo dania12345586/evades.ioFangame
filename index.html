@@ -13,8 +13,8 @@
         <div style="background: #1a1a2e; padding: 40px; border-radius: 20px; width: 320px; box-shadow: 0 0 40px rgba(0,0,0,0.8); text-align: center;">
             <h1 style="color: #fff; font-family: Arial; margin-bottom: 30px;">Evades.io</h1>
             <div id="authForm">
-                <input type="text" id="usernameInput" placeholder="Username (логин)" style="width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; background: #2a2a3a; color: #fff; font-size: 16px;" />
-                <input type="password" id="passwordInput" placeholder="Password" style="width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #333; background: #2a2a3a; color: #fff; font-size: 16px;" />
+                <input type="text" id="usernameInput" placeholder="Имя пользователя" style="width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; background: #2a2a3a; color: #fff; font-size: 16px;" />
+                <input type="password" id="passwordInput" placeholder="Пароль" style="width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #333; background: #2a2a3a; color: #fff; font-size: 16px;" />
                 <button id="signInBtn" style="width: 100%; padding: 12px; background: #4ecdc4; border: none; border-radius: 8px; color: #fff; font-size: 18px; cursor: pointer; margin-bottom: 10px;">Войти</button>
                 <button id="signUpBtn" style="width: 100%; padding: 12px; background: #22193A; border: 1px solid #4ecdc4; border-radius: 8px; color: #fff; font-size: 18px; cursor: pointer;">Зарегистрироваться</button>
                 <div id="authMessage" style="color: #ff6b6b; margin-top: 15px; font-size: 14px;"></div>
@@ -64,8 +64,8 @@
     <script src="js/ui/Panel.js"></script>
     <script src="js/core/Game.js"></script>
 
+    <!-- Логика авторизации -->
     <script>
-        // Логика авторизации
         document.addEventListener('DOMContentLoaded', async () => {
             const authContainer = document.getElementById('authContainer');
             const authForm = document.getElementById('authForm');
@@ -79,14 +79,20 @@
             const signUpBtn = document.getElementById('signUpBtn');
             const logoutBtn = document.getElementById('logoutBtn');
 
-            // Проверяем сессию
-            const session = await getSession();
-            if (session && session.user) {
-                authForm.style.display = 'none';
-                authLogout.style.display = 'block';
-                userNameDisplay.textContent = session.user.email.split('@')[0]; // показываем только имя
-                authContainer.style.display = 'none';
-                showHeroMenu();
+            // Проверяем сессию в localStorage
+            let currentUser = null;
+            const saved = localStorage.getItem('evades_user');
+            if (saved) {
+                try {
+                    currentUser = JSON.parse(saved);
+                    authContainer.style.display = 'none';
+                    authForm.style.display = 'none';
+                    authLogout.style.display = 'block';
+                    userNameDisplay.textContent = currentUser.username;
+                    showHeroMenu();
+                } catch(e) {
+                    authContainer.style.display = 'flex';
+                }
             } else {
                 authContainer.style.display = 'flex';
             }
@@ -99,18 +105,21 @@
                     authMessage.textContent = 'Заполните все поля';
                     return;
                 }
-                if (username.length > 16 || password.length > 16) {
-                    authMessage.textContent = 'Максимум 16 символов';
+                if (username.length < 3) {
+                    authMessage.textContent = 'Имя должно быть не менее 3 символов';
                     return;
                 }
-                const email = username + '@evades.io';
-                const data = await signUp(email, password);
-                if (data && data.user) {
+                const result = await registerUser(username, password);
+                if (result.error) {
+                    if (result.error.code === '23505') {
+                        authMessage.textContent = 'Это имя уже занято';
+                    } else {
+                        authMessage.textContent = 'Ошибка регистрации. Попробуйте другое имя.';
+                    }
+                    console.error(result.error);
+                } else {
                     authMessage.style.color = '#4ecdc4';
                     authMessage.textContent = 'Регистрация успешна! Теперь войдите.';
-                } else {
-                    authMessage.style.color = '#ff6b6b';
-                    authMessage.textContent = 'Ошибка регистрации. Возможно, имя занято.';
                 }
             });
 
@@ -122,27 +131,24 @@
                     authMessage.textContent = 'Заполните все поля';
                     return;
                 }
-                const email = username + '@evades.io';
-                const data = await signIn(email, password);
-                if (data && data.session) {
-                    authMessage.textContent = '';
+                const result = await loginUser(username, password);
+                if (result.error || !result.data) {
+                    authMessage.style.color = '#ff6b6b';
+                    authMessage.textContent = 'Неверное имя или пароль';
+                } else {
+                    currentUser = result.data;
+                    localStorage.setItem('evades_user', JSON.stringify(currentUser));
                     authContainer.style.display = 'none';
                     authForm.style.display = 'none';
                     authLogout.style.display = 'block';
-                    userNameDisplay.textContent = username;
+                    userNameDisplay.textContent = currentUser.username;
                     showHeroMenu();
-                } else {
-                    authMessage.style.color = '#ff6b6b';
-                    authMessage.textContent = 'Неверный логин или пароль';
                 }
             });
 
             // Выход
-            logoutBtn.addEventListener('click', async () => {
-                await signOut();
-                authContainer.style.display = 'flex';
-                authForm.style.display = 'block';
-                authLogout.style.display = 'none';
+            logoutBtn.addEventListener('click', () => {
+                localStorage.removeItem('evades_user');
                 location.reload();
             });
         });

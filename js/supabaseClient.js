@@ -5,41 +5,40 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ---- АУТЕНТИФИКАЦИЯ ----
-
-async function signUp(email, password) {
-  const { data, error } = await supabaseClient.auth.signUp({ email, password });
-  if (error) console.error('SignUp error:', error);
-  return data;
+// ---- РЕГИСТРАЦИЯ (имя + пароль) ----
+async function registerUser(username, password) {
+  const { data, error } = await supabaseClient
+    .from('users')
+    .insert({ username, password })
+    .select()
+    .single();
+  if (error) {
+    console.error('Register error:', error);
+    return { error };
+  }
+  return { data };
 }
 
-async function signIn(email, password) {
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) console.error('SignIn error:', error);
-  return data;
+// ---- ВХОД ----
+async function loginUser(username, password) {
+  const { data, error } = await supabaseClient
+    .from('users')
+    .select('*')
+    .eq('username', username)
+    .eq('password', password)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Login error:', error);
+    return { error };
+  }
+  return { data };
 }
 
-async function signOut() {
-  const { error } = await supabaseClient.auth.signOut();
-  if (error) console.error('SignOut error:', error);
-}
-
-async function getCurrentUser() {
-  const { data: { user } } = await supabaseClient.auth.getUser();
-  return user;
-}
-
-async function getSession() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  return session;
-}
-
-// ---- РАБОТА С ИГРОКАМИ ----
-
+// ---- ИГРОКИ ----
 async function createPlayer(name, heroClass, userId = null) {
   const insertData = { name, hero: heroClass };
   if (userId) {
-    // Если передан userId, используем его как id (для авторизованных)
     insertData.id = userId;
   }
   const { data, error } = await supabaseClient
@@ -62,12 +61,8 @@ async function getPlayerByUserId(userId) {
 }
 
 // ---- КОМНАТЫ ----
-
 async function joinRoom(playerId, roomId) {
-  // 1. Увеличиваем счётчик игроков в комнате
   await supabaseClient.rpc('increment_room_players', { room_id: roomId, delta: 1 });
-
-  // 2. Вставляем состояние игрока
   const { data, error } = await supabaseClient
     .from('player_state')
     .insert({
@@ -84,17 +79,14 @@ async function joinRoom(playerId, roomId) {
 }
 
 async function leaveRoom(playerId, roomId) {
-  // Уменьшаем счётчик игроков
   await supabaseClient.rpc('increment_room_players', { room_id: roomId, delta: -1 });
-  // Удаляем состояние игрока
   await supabaseClient
     .from('player_state')
     .delete()
     .eq('player_id', playerId);
 }
 
-// ---- СИНХРОНИЗАЦИЯ ПОЗИЦИЙ ----
-
+// ---- СИНХРОНИЗАЦИЯ ----
 let lastSyncTime = 0;
 const SYNC_INTERVAL = 0.1;
 
@@ -118,7 +110,6 @@ async function syncPosition(playerId, x, y, hp, energy, isAlive) {
 }
 
 // ---- ПОДПИСКИ ----
-
 function subscribeToRoom(roomId, myPlayerId, onUpdate) {
   const channel = supabaseClient.channel(`room:${roomId}`);
 
@@ -139,8 +130,7 @@ function subscribeToRoom(roomId, myPlayerId, onUpdate) {
   return channel;
 }
 
-// ---- ЧАТ (пока не используется, но можно добавить) ----
-
+// ---- ЧАТ ----
 async function sendMessage(roomId, playerId, text) {
   const { error } = await supabaseClient
     .from('messages')
@@ -171,12 +161,9 @@ function subscribeToChat(roomId, onMessage) {
   return channel;
 }
 
-// ---- ДЕЛАЕМ ФУНКЦИИ ДОСТУПНЫМИ ГЛОБАЛЬНО ----
-window.signUp = signUp;
-window.signIn = signIn;
-window.signOut = signOut;
-window.getCurrentUser = getCurrentUser;
-window.getSession = getSession;
+// ---- ГЛОБАЛЬНЫЙ ЭКСПОРТ ----
+window.registerUser = registerUser;
+window.loginUser = loginUser;
 window.createPlayer = createPlayer;
 window.getPlayerByUserId = getPlayerByUserId;
 window.joinRoom = joinRoom;

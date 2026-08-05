@@ -71,7 +71,7 @@ let isTransitioning = false;
 
 // === МУЛЬТИПЛЕЕРНЫЕ ПЕРЕМЕННЫЕ ===
 let myPlayerId = null;
-let myRoomId = '00000000-0000-0000-0000-000000000001'; // фиксированная комната
+let myRoomId = '00000000-0000-0000-0000-000000000001';
 let otherPlayers = {};
 let multiplayerChannel = null;
 
@@ -104,7 +104,6 @@ function startGameWithHero(heroClass, mapIndex = 0) {
     isWin = false;
     isTransitioning = false;
 
-    // === ИНИЦИАЛИЗАЦИЯ МУЛЬТИПЛЕЕРА ===
     initMultiplayer(heroClass.name);
 
     if (window.__animId) {
@@ -116,36 +115,30 @@ function startGameWithHero(heroClass, mapIndex = 0) {
 
 async function initMultiplayer(heroName) {
     try {
-        // Проверяем, залогинен ли пользователь
-        const session = await getSession();
         let userId = null;
-        if (session && session.user) {
-            userId = session.user.id;
+        const saved = localStorage.getItem('evades_user');
+        if (saved) {
+            const user = JSON.parse(saved);
+            userId = user.id;
         }
 
-        // Создаём или получаем игрока
         let playerData;
         if (userId) {
-            // Ищем существующего игрока с этим user_id
             const existing = await getPlayerByUserId(userId);
             if (existing) {
                 playerData = existing;
             } else {
-                // Создаём нового игрока с user_id в качестве id
                 playerData = await createPlayer(heroName, heroName, userId);
             }
         } else {
-            // Без авторизации – создаём анонимного игрока
             playerData = await createPlayer('Player', heroName);
         }
         myPlayerId = playerData.id;
         console.log('Player created:', myPlayerId);
 
-        // Присоединяемся к комнате
         await joinRoom(myPlayerId, myRoomId);
         console.log('Joined room:', myRoomId);
 
-        // Подписываемся на обновления других игроков
         if (multiplayerChannel) {
             multiplayerChannel.unsubscribe();
         }
@@ -160,7 +153,6 @@ async function initMultiplayer(heroName) {
             }
         });
 
-        // При закрытии вкладки – покидаем комнату
         window.addEventListener('beforeunload', () => {
             if (myPlayerId && myRoomId) {
                 leaveRoom(myPlayerId, myRoomId);
@@ -299,7 +291,7 @@ function gameLoop() {
     level.update();
     manager.update();
 
-    // === СИНХРОНИЗАЦИЯ ПОЗИЦИИ С SUPABASE ===
+    // === СИНХРОНИЗАЦИЯ ПОЗИЦИИ ===
     if (myPlayerId && player.alive) {
         syncPosition(myPlayerId, player.x, player.y, 100, player.energy, player.alive);
     }
@@ -356,7 +348,7 @@ function gameLoop() {
         }
     }
 
-    // === Обычные переходы между уровнями (только если игрок жив) ===
+    // === Обычные переходы ===
     if (level.isComplete && player.alive) {
         if (level.isWin) {
             gameOver = true;
@@ -417,10 +409,9 @@ function render() {
     player.draw(ctx, SCALE);
     if (player.drawEffects) player.drawEffects(ctx, SCALE);
 
-    // === РИСУЕМ ДРУГИХ ИГРОКОВ ===
+    // === ДРУГИЕ ИГРОКИ ===
     for (const id in otherPlayers) {
         const p = otherPlayers[id];
-        // Интерполяция
         if (p.targetX !== undefined) {
             p.x += (p.targetX - p.x) * 0.15;
             p.y += (p.targetY - p.y) * 0.15;
@@ -445,7 +436,7 @@ function render() {
         ctx.globalAlpha = 1;
     }
 
-    // === Порталы ===
+    // === ПОРТАЛЫ ===
     if (currentMapIndex === 0 && level.levelNumber === 1) {
         const portalX = offsetX;
         const portalY = offsetY;
@@ -622,5 +613,11 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 window.onload = function() {
-    showHeroMenu();
+    // Показываем меню только если пользователь авторизован
+    // Иначе форма входа отобразится автоматически через код в index.html
+    // Но если по какой-то причине сессия есть, показываем меню
+    const saved = localStorage.getItem('evades_user');
+    if (saved) {
+        showHeroMenu();
+    }
 };
