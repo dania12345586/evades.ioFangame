@@ -83,3 +83,12 @@ html, body {
     line-height: 1.5;
     display: none;
 }
+/* Чат */
+#chatInput {
+    font-family: Arial, sans-serif;
+    outline: none;
+}
+#chatInput:focus {
+    border-color: #4ecdc4;
+    box-shadow: 0 0 10px rgba(78, 205, 196, 0.3);
+}

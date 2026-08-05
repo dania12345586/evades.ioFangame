@@ -28,7 +28,10 @@
 
     <!-- Меню героев -->
     <div id="heroMenu" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; flex-direction: column; z-index: 100;">
-        <h1 style="color: white; font-family: Arial; margin-bottom: 40px;">Выберите героя</h1>
+        <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 40px;">
+            <h1 style="color: white; font-family: Arial; margin: 0;">Выберите героя</h1>
+            <button id="logoutFromMenuBtn" style="padding: 8px 16px; background: #ff4444; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-size: 14px;">Выйти</button>
+        </div>
         <div id="heroList"></div>
     </div>
 
@@ -64,7 +67,6 @@
     <script src="js/ui/Panel.js"></script>
     <script src="js/core/Game.js"></script>
 
-    <!-- Логика авторизации -->
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
             const authContainer = document.getElementById('authContainer');
@@ -78,8 +80,9 @@
             const signInBtn = document.getElementById('signInBtn');
             const signUpBtn = document.getElementById('signUpBtn');
             const logoutBtn = document.getElementById('logoutBtn');
+            const logoutFromMenuBtn = document.getElementById('logoutFromMenuBtn');
 
-            // Проверяем сессию в localStorage
+            // Проверяем сессию
             let currentUser = null;
             const saved = localStorage.getItem('evades_user');
             if (saved) {
@@ -146,8 +149,14 @@
                 }
             });
 
-            // Выход
+            // Выход из формы
             logoutBtn.addEventListener('click', () => {
+                localStorage.removeItem('evades_user');
+                location.reload();
+            });
+
+            // Выход из меню героев
+            logoutFromMenuBtn.addEventListener('click', () => {
                 localStorage.removeItem('evades_user');
                 location.reload();
             });

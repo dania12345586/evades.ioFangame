@@ -74,6 +74,9 @@ let myPlayerId = null;
 let myRoomId = '00000000-0000-0000-0000-000000000001';
 let otherPlayers = {};
 let multiplayerChannel = null;
+let chatMessages = [];
+let chatInput = null;
+let chatOpen = false;
 
 const maps = [
     { name: 'Chaos Core', class: BasicCoreMap },
@@ -106,6 +109,43 @@ function startGameWithHero(heroClass, mapIndex = 0) {
 
     initMultiplayer(heroClass.name);
 
+    // Создаём поле ввода для чата
+    if (!chatInput) {
+        chatInput = document.createElement('input');
+        chatInput.type = 'text';
+        chatInput.id = 'chatInput';
+        chatInput.maxLength = 250;
+        chatInput.placeholder = 'Press Enter to chat';
+        chatInput.style.position = 'fixed';
+        chatInput.style.bottom = '20px';
+        chatInput.style.left = '20px';
+        chatInput.style.width = '300px';
+        chatInput.style.padding = '8px 12px';
+        chatInput.style.borderRadius = '8px';
+        chatInput.style.border = '1px solid #444';
+        chatInput.style.background = 'rgba(0,0,0,0.7)';
+        chatInput.style.color = '#fff';
+        chatInput.style.fontSize = '14px';
+        chatInput.style.display = 'none';
+        chatInput.style.zIndex = '200';
+        chatInput.style.backdropFilter = 'blur(5px)';
+        document.body.appendChild(chatInput);
+
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const text = chatInput.value.trim();
+                if (text.length > 0) {
+                    sendChatMessage(text);
+                    chatInput.value = '';
+                }
+                closeChat();
+            }
+            if (e.key === 'Escape') {
+                closeChat();
+            }
+        });
+    }
+
     if (window.__animId) {
         cancelAnimationFrame(window.__animId);
         window.__animId = null;
@@ -113,32 +153,76 @@ function startGameWithHero(heroClass, mapIndex = 0) {
     gameLoop();
 }
 
+function openChat() {
+    chatOpen = true;
+    chatInput.style.display = 'block';
+    chatInput.focus();
+}
+
+function closeChat() {
+    chatOpen = false;
+    chatInput.style.display = 'none';
+    chatInput.blur();
+}
+
+function sendChatMessage(text) {
+    if (!myPlayerId || !myRoomId) return;
+    sendMessage(myRoomId, myPlayerId, text);
+    // добавляем своё сообщение локально
+    const saved = localStorage.getItem('evades_user');
+    let username = 'Player';
+    if (saved) {
+        try {
+            const user = JSON.parse(saved);
+            username = user.username;
+        } catch(e) {}
+    }
+    chatMessages.push({ username, text, mine: true });
+}
+
+// === ИНИЦИАЛИЗАЦИЯ МУЛЬТИПЛЕЕРА ===
 async function initMultiplayer(heroName) {
     try {
         let userId = null;
+        let username = 'Player';
         const saved = localStorage.getItem('evades_user');
         if (saved) {
             const user = JSON.parse(saved);
             userId = user.id;
+            username = user.username;
         }
 
         let playerData;
         if (userId) {
+            // Проверяем, есть ли уже игрок с таким userId
             const existing = await getPlayerByUserId(userId);
             if (existing) {
                 playerData = existing;
+                // Обновляем имя и героя, если они изменились
+                if (playerData.name !== username || playerData.hero !== heroName) {
+                    await supabaseClient
+                        .from('players')
+                        .update({ name: username, hero: heroName })
+                        .eq('id', userId);
+                    playerData.name = username;
+                    playerData.hero = heroName;
+                }
             } else {
-                playerData = await createPlayer(heroName, heroName, userId);
+                // Создаём нового игрока, привязывая к userId
+                playerData = await createPlayer(username, heroName, userId);
             }
         } else {
+            // Без авторизации – создаём анонимного
             playerData = await createPlayer('Player', heroName);
         }
         myPlayerId = playerData.id;
-        console.log('Player created:', myPlayerId);
+        console.log('Player ID:', myPlayerId);
 
+        // Присоединяемся к комнате
         await joinRoom(myPlayerId, myRoomId);
-        console.log('Joined room:', myRoomId);
+        console.log('Joined room');
 
+        // Подписываемся на обновления других игроков
         if (multiplayerChannel) {
             multiplayerChannel.unsubscribe();
         }
@@ -153,9 +237,44 @@ async function initMultiplayer(heroName) {
             }
         });
 
+        // Подписываемся на сообщения чата
+        subscribeToChat(myRoomId, (playerId, text) => {
+            // Получаем имя отправителя (можно из players, но для простоты пока так)
+            // В реальности нужно делать запрос, но для теста используем заглушку
+            // Лучше получать из players по id, но для простоты пока сохраним в локальном массиве
+            // Позже добавим получение имени через join
+            // Временно сохраняем имя в отдельном объекте
+            if (!window._chatNames) window._chatNames = {};
+            // Если у нас нет имени для этого playerId, запросим
+            if (!window._chatNames[playerId]) {
+                supabaseClient
+                    .from('players')
+                    .select('name')
+                    .eq('id', playerId)
+                    .single()
+                    .then(({ data }) => {
+                        if (data) {
+                            window._chatNames[playerId] = data.name;
+                            chatMessages.push({ username: data.name, text, mine: false });
+                        }
+                    });
+            } else {
+                chatMessages.push({ username: window._chatNames[playerId], text, mine: false });
+            }
+        });
+
+        // При закрытии вкладки – покидаем комнату
         window.addEventListener('beforeunload', () => {
             if (myPlayerId && myRoomId) {
                 leaveRoom(myPlayerId, myRoomId);
+            }
+        });
+
+        // Обработка клавиш для чата (глобально)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !chatOpen && !e.target.closest('input')) {
+                e.preventDefault();
+                openChat();
             }
         });
 
@@ -193,7 +312,6 @@ function switchMap(newMapIndex) {
     newPlayer.isDead = player.isDead;
     newPlayer.respawnTimer = player.respawnTimer;
     newPlayer.godMode = player.godMode;
-    // Копируем специфичные поля
     if (player.mines) newPlayer.mines = player.mines.slice();
     if (player.activeRocket) newPlayer.activeRocket = player.activeRocket;
     if (player.teslaStation !== undefined) {
@@ -377,8 +495,38 @@ function gameLoop() {
     render();
     drawLevelName();
     drawBottomPanel();
+    drawChat();
 
     window.__animId = requestAnimationFrame(gameLoop);
+}
+
+function drawChat() {
+    // Отрисовка сообщений чата (в левом верхнем углу)
+    const maxMessages = 10;
+    const startX = 20;
+    const startY = 20;
+    const lineHeight = 22;
+    const maxWidth = 400;
+
+    ctx.save();
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    // Показываем только последние maxMessages сообщений
+    const visible = chatMessages.slice(-maxMessages);
+    for (let i = 0; i < visible.length; i++) {
+        const msg = visible[i];
+        const y = startY + i * lineHeight;
+        const prefix = msg.mine ? 'You: ' : (msg.username + ': ');
+        const fullText = prefix + msg.text;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(startX - 5, y - 2, Math.min(ctx.measureText(fullText).width + 10, maxWidth), lineHeight);
+        ctx.fillStyle = msg.mine ? '#4ecdc4' : '#fff';
+        ctx.fillText(fullText, startX, y);
+    }
+
+    ctx.restore();
 }
 
 function render() {
@@ -614,8 +762,6 @@ window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 window.onload = function() {
     // Показываем меню только если пользователь авторизован
-    // Иначе форма входа отобразится автоматически через код в index.html
-    // Но если по какой-то причине сессия есть, показываем меню
     const saved = localStorage.getItem('evades_user');
     if (saved) {
         showHeroMenu();
