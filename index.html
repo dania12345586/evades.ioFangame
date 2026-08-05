@@ -9,15 +9,20 @@
 <body>
     <div id="heroMenu" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); justify-content: center; align-items: center; flex-direction: column; z-index: 100;">
         <h1 style="color: white; font-family: Arial; margin-bottom: 40px;">Выберите героя</h1>
-        <div id="heroList" style="display: flex; gap: 30px; flex-wrap: wrap; justify-content: center;"></div>
+        <div id="heroList"></div>
+        <!-- Кредиты будут добавлены позже -->
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
     <!-- Тултип -->
-    <div id="tooltip" style="display: none; position: absolute; background: rgba(0,0,0,0.85); color: #fff; padding: 10px 14px; border-radius: 8px; font-family: Arial, sans-serif; font-size: 14px; max-width: 280px; pointer-events: none; z-index: 200; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 20px rgba(0,0,0,0.8); line-height: 1.5;"></div>
+    <div id="tooltip"></div>
 
-    <!-- Подключаем все файлы в правильном порядке -->
+    <!-- ===== SUPABASE ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabaseClient.js"></script>
+
+    <!-- ===== ОСНОВНЫЕ СКРИПТЫ ===== -->
     <script src="js/utils.js"></script>
     <script src="js/player.js"></script>
     <script src="js/enemy.js"></script>
@@ -26,18 +31,18 @@
     <script src="js/core/LevelManager.js"></script>
     <script src="js/core/Renderer.js"></script>
 
-    <!-- Герои -->
+    <!-- ===== ГЕРОИ ===== -->
     <script src="js/heroes/Scutum.js"></script>
     <script src="js/heroes/Sylvanus.js"></script>
     <script src="js/heroes/Crepitus.js"></script>
-    <script src="js/heroes/Vortex.js"></script>  <!-- ВАЖНО: до menu.js -->
+    <script src="js/heroes/Vortex.js"></script>
 
-    <!-- Карты -->
+    <!-- ===== КАРТЫ ===== -->
     <script src="js/maps/BasicCore.js"></script>
     <script src="js/maps/PrimalPeaksMap.js"></script>
     <script src="js/maps/FactoryFortressMap.js"></script>
 
-    <!-- UI и запуск -->
+    <!-- ===== UI И ЗАПУСК ===== -->
     <script src="js/menu.js"></script>
     <script src="js/ui/Panel.js"></script>
     <script src="js/core/Game.js"></script>
