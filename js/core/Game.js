@@ -69,6 +69,11 @@ let HeroClass = Scutum;
 let currentMapIndex = 0;
 let isTransitioning = false;
 
+// === МУЛЬТИПЛЕЕРНЫЕ ПЕРЕМЕННЫЕ ===
+let myPlayerId = null;
+let myRoomId = null;
+let otherPlayers = {};
+
 const maps = [
     { name: 'Chaos Core', class: BasicCoreMap },
     { name: 'Primal Peaks', class: PrimalPeaksMap },
@@ -97,11 +102,49 @@ function startGameWithHero(heroClass, mapIndex = 0) {
     gameOver = false;
     isWin = false;
     isTransitioning = false;
+
+    // === СОЗДАНИЕ ИГРОКА В SUPABASE ===
+    initMultiplayer(heroClass.name);
+
     if (window.__animId) {
         cancelAnimationFrame(window.__animId);
         window.__animId = null;
     }
     gameLoop();
+}
+
+async function initMultiplayer(heroName) {
+    try {
+        // 1. Создаём игрока
+        const playerData = await createPlayer('Player', heroName);
+        myPlayerId = playerData.id;
+        console.log('Player created:', myPlayerId);
+
+        // 2. Создаём комнату (или присоединяемся к существующей)
+        const room = await createRoom('Room1');
+        myRoomId = room.id;
+        console.log('Room created:', myRoomId);
+
+        // 3. Входим в комнату
+        await joinRoom(myPlayerId, myRoomId);
+        console.log('Joined room');
+
+        // 4. Подписываемся на обновления других игроков
+        subscribeToRoom(myRoomId, myPlayerId, (id, x, y, hp, isAlive) => {
+            if (!otherPlayers[id]) {
+                otherPlayers[id] = { x, y, hp, isAlive, targetX: x, targetY: y };
+            } else {
+                otherPlayers[id].targetX = x;
+                otherPlayers[id].targetY = y;
+                otherPlayers[id].hp = hp;
+                otherPlayers[id].isAlive = isAlive;
+            }
+        });
+
+        // 5. Подписываемся на чат (опционально, потом добавим)
+    } catch (error) {
+        console.error('Multiplayer init error:', error);
+    }
 }
 
 function switchMap(newMapIndex) {
@@ -133,21 +176,9 @@ function switchMap(newMapIndex) {
     newPlayer.isDead = player.isDead;
     newPlayer.respawnTimer = player.respawnTimer;
     newPlayer.godMode = player.godMode;
-    if (player.mines) {
-        newPlayer.mines = player.mines.slice();
-    }
-    if (player.activeRocket) {
-        newPlayer.activeRocket = player.activeRocket;
-    }
-    if (player.passiveCooldown !== undefined) {
-        newPlayer.passiveCooldown = player.passiveCooldown;
-        newPlayer.passiveOnCooldown = player.passiveOnCooldown;
-        newPlayer.mineOnCooldown = player.mineOnCooldown;
-        newPlayer.mineCooldown = player.mineCooldown;
-        newPlayer.rocketOnCooldown = player.rocketOnCooldown;
-        newPlayer.rocketCooldown = player.rocketCooldown;
-    }
-    // Для Vortex копируем специфические поля
+    // Копируем специфичные поля
+    if (player.mines) newPlayer.mines = player.mines.slice();
+    if (player.activeRocket) newPlayer.activeRocket = player.activeRocket;
     if (player.teslaStation !== undefined) {
         newPlayer.teslaStation = player.teslaStation;
         newPlayer.teslaCooldown = player.teslaCooldown;
@@ -159,7 +190,9 @@ function switchMap(newMapIndex) {
         newPlayer.portalCooldown = player.portalCooldown;
         newPlayer.portalActive = player.portalActive;
     }
+    // Сброс мультиплеерных данных (они уже есть)
     player = newPlayer;
+    player.respawn(105, level.mapHeight / 2);
     
     level.initLevel(player, 'forward');
     
@@ -241,6 +274,11 @@ function gameLoop() {
 
     level.update();
     manager.update();
+
+    // === СИНХРОНИЗАЦИЯ ПОЗИЦИИ С SUPABASE ===
+    if (myPlayerId && player.alive) {
+        syncPosition(myPlayerId, player.x, player.y, 100, player.energy, player.alive);
+    }
 
     // === Межкартовые порталы ===
     if (currentMapIndex === 0 && level.levelNumber === 1 && player.alive) {
@@ -352,8 +390,40 @@ function render() {
 
     ctx.restore();
 
+    // Рисуем своего игрока
     player.draw(ctx, SCALE);
     if (player.drawEffects) player.drawEffects(ctx, SCALE);
+
+    // === РИСУЕМ ДРУГИХ ИГРОКОВ ===
+    for (const id in otherPlayers) {
+        const p = otherPlayers[id];
+        // Интерполяция для плавности
+        if (p.targetX !== undefined) {
+            p.x += (p.targetX - p.x) * 0.15;
+            p.y += (p.targetY - p.y) * 0.15;
+        }
+        // Рисуем кружок другого игрока
+        const drawX = (p.x - player.x) * SCALE + canvas.width/2;
+        const drawY = (p.y - player.y) * SCALE + canvas.height/2;
+        const drawR = player.radius * SCALE;
+
+        // Если игрок не жив, рисуем серым
+        if (p.isAlive === false) {
+            ctx.fillStyle = '#666';
+            ctx.globalAlpha = 0.5;
+        } else {
+            ctx.fillStyle = '#4ecdc4'; // можно потом задавать цвет героя
+            ctx.globalAlpha = 1;
+        }
+        ctx.beginPath();
+        ctx.arc(drawX, drawY, drawR, 0, Math.PI * 2);
+        ctx.fill();
+        // Обводка
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    }
 
     // === Порталы ===
     if (currentMapIndex === 0 && level.levelNumber === 1) {
