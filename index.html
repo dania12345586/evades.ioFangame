@@ -83,15 +83,14 @@
             const logoutFromMenuBtn = document.getElementById('logoutFromMenuBtn');
 
             // Проверяем сессию
-            let currentUser = null;
             const saved = localStorage.getItem('evades_user');
             if (saved) {
                 try {
-                    currentUser = JSON.parse(saved);
+                    const user = JSON.parse(saved);
                     authContainer.style.display = 'none';
                     authForm.style.display = 'none';
                     authLogout.style.display = 'block';
-                    userNameDisplay.textContent = currentUser.username;
+                    userNameDisplay.textContent = user.username;
                     showHeroMenu();
                 } catch(e) {
                     authContainer.style.display = 'flex';
@@ -139,12 +138,12 @@
                     authMessage.style.color = '#ff6b6b';
                     authMessage.textContent = 'Неверное имя или пароль';
                 } else {
-                    currentUser = result.data;
-                    localStorage.setItem('evades_user', JSON.stringify(currentUser));
+                    const user = result.data;
+                    localStorage.setItem('evades_user', JSON.stringify(user));
                     authContainer.style.display = 'none';
                     authForm.style.display = 'none';
                     authLogout.style.display = 'block';
-                    userNameDisplay.textContent = currentUser.username;
+                    userNameDisplay.textContent = user.username;
                     showHeroMenu();
                 }
             });

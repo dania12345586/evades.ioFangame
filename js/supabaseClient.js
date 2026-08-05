@@ -5,8 +5,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ---- РЕГИСТРАЦИЯ (имя + пароль) ----
+// ---- РЕГИСТРАЦИЯ ----
 async function registerUser(username, password) {
+  console.log('registerUser called with:', username, password);
   const { data, error } = await supabaseClient
     .from('users')
     .insert({ username, password })
@@ -16,11 +17,13 @@ async function registerUser(username, password) {
     console.error('Register error:', error);
     return { error };
   }
+  console.log('Register success:', data);
   return { data };
 }
 
 // ---- ВХОД ----
 async function loginUser(username, password) {
+  console.log('loginUser called with:', username, password);
   const { data, error } = await supabaseClient
     .from('users')
     .select('*')
@@ -32,10 +35,11 @@ async function loginUser(username, password) {
     console.error('Login error:', error);
     return { error };
   }
+  console.log('Login result:', data);
   return { data };
 }
 
-// ---- ИГРОКИ ----
+// ---- ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений) ----
 async function createPlayer(name, heroClass, userId = null) {
   const insertData = { name, hero: heroClass };
   if (userId) {
@@ -60,7 +64,6 @@ async function getPlayerByUserId(userId) {
   return data;
 }
 
-// ---- КОМНАТЫ ----
 async function joinRoom(playerId, roomId) {
   await supabaseClient.rpc('increment_room_players', { room_id: roomId, delta: 1 });
   const { data, error } = await supabaseClient
@@ -86,7 +89,6 @@ async function leaveRoom(playerId, roomId) {
     .eq('player_id', playerId);
 }
 
-// ---- СИНХРОНИЗАЦИЯ ----
 let lastSyncTime = 0;
 const SYNC_INTERVAL = 0.1;
 
@@ -109,7 +111,6 @@ async function syncPosition(playerId, x, y, hp, energy, isAlive) {
   if (error) console.error('Error syncing position:', error);
 }
 
-// ---- ПОДПИСКИ ----
 function subscribeToRoom(roomId, myPlayerId, onUpdate) {
   const channel = supabaseClient.channel(`room:${roomId}`);
 
@@ -130,7 +131,6 @@ function subscribeToRoom(roomId, myPlayerId, onUpdate) {
   return channel;
 }
 
-// ---- ЧАТ ----
 async function sendMessage(roomId, playerId, text) {
   const { error } = await supabaseClient
     .from('messages')
@@ -161,7 +161,6 @@ function subscribeToChat(roomId, onMessage) {
   return channel;
 }
 
-// ---- ГЛОБАЛЬНЫЙ ЭКСПОРТ ----
 window.registerUser = registerUser;
 window.loginUser = loginUser;
 window.createPlayer = createPlayer;
