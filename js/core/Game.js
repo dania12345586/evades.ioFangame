@@ -109,7 +109,6 @@ function startGameWithHero(heroClass, mapIndex = 0) {
 
     initMultiplayer(heroClass.name);
 
-    // Создаём поле ввода для чата
     if (!chatInput) {
         chatInput = document.createElement('input');
         chatInput.type = 'text';
@@ -168,7 +167,6 @@ function closeChat() {
 function sendChatMessage(text) {
     if (!myPlayerId || !myRoomId) return;
     sendMessage(myRoomId, myPlayerId, text);
-    // добавляем своё сообщение локально
     const saved = localStorage.getItem('evades_user');
     let username = 'Player';
     if (saved) {
@@ -194,11 +192,9 @@ async function initMultiplayer(heroName) {
 
         let playerData;
         if (userId) {
-            // Проверяем, есть ли уже игрок с таким userId
             const existing = await getPlayerByUserId(userId);
             if (existing) {
                 playerData = existing;
-                // Обновляем имя и героя, если они изменились
                 if (playerData.name !== username || playerData.hero !== heroName) {
                     await supabaseClient
                         .from('players')
@@ -208,25 +204,22 @@ async function initMultiplayer(heroName) {
                     playerData.hero = heroName;
                 }
             } else {
-                // Создаём нового игрока, привязывая к userId
                 playerData = await createPlayer(username, heroName, userId);
             }
         } else {
-            // Без авторизации – создаём анонимного
             playerData = await createPlayer('Player', heroName);
         }
         myPlayerId = playerData.id;
         console.log('Player ID:', myPlayerId);
 
-        // Присоединяемся к комнате
         await joinRoom(myPlayerId, myRoomId);
         console.log('Joined room');
 
-        // Подписываемся на обновления других игроков
         if (multiplayerChannel) {
             multiplayerChannel.unsubscribe();
         }
         multiplayerChannel = subscribeToRoom(myRoomId, myPlayerId, (id, x, y, hp, isAlive) => {
+            console.log('Got update for player', id, x, y);
             if (!otherPlayers[id]) {
                 otherPlayers[id] = { x, y, hp, isAlive, targetX: x, targetY: y };
             } else {
@@ -237,15 +230,9 @@ async function initMultiplayer(heroName) {
             }
         });
 
-        // Подписываемся на сообщения чата
         subscribeToChat(myRoomId, (playerId, text) => {
-            // Получаем имя отправителя (можно из players, но для простоты пока так)
-            // В реальности нужно делать запрос, но для теста используем заглушку
-            // Лучше получать из players по id, но для простоты пока сохраним в локальном массиве
-            // Позже добавим получение имени через join
-            // Временно сохраняем имя в отдельном объекте
+            console.log('Chat message from', playerId, text);
             if (!window._chatNames) window._chatNames = {};
-            // Если у нас нет имени для этого playerId, запросим
             if (!window._chatNames[playerId]) {
                 supabaseClient
                     .from('players')
@@ -263,14 +250,12 @@ async function initMultiplayer(heroName) {
             }
         });
 
-        // При закрытии вкладки – покидаем комнату
         window.addEventListener('beforeunload', () => {
             if (myPlayerId && myRoomId) {
                 leaveRoom(myPlayerId, myRoomId);
             }
         });
 
-        // Обработка клавиш для чата (глобально)
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !chatOpen && !e.target.closest('input')) {
                 e.preventDefault();
@@ -409,12 +394,11 @@ function gameLoop() {
     level.update();
     manager.update();
 
-    // === СИНХРОНИЗАЦИЯ ПОЗИЦИИ ===
     if (myPlayerId && player.alive) {
         syncPosition(myPlayerId, player.x, player.y, 100, player.energy, player.alive);
     }
 
-    // === Межкартовые порталы ===
+    // Межкартовые порталы
     if (currentMapIndex === 0 && level.levelNumber === 1 && player.alive) {
         const px = player.x;
         const py = player.y;
@@ -448,7 +432,7 @@ function gameLoop() {
         }
     }
 
-    // === Victory ===
+    // Victory
     if (level.isVictory && player.alive) {
         let portalX = (level.portalSide === 'left') ? 0 : level.mapWidth - 40;
         if (player.x >= portalX && player.x <= portalX + 40) {
@@ -466,7 +450,7 @@ function gameLoop() {
         }
     }
 
-    // === Обычные переходы ===
+    // Обычные переходы
     if (level.isComplete && player.alive) {
         if (level.isWin) {
             gameOver = true;
@@ -501,29 +485,36 @@ function gameLoop() {
 }
 
 function drawChat() {
-    // Отрисовка сообщений чата (в левом верхнем углу)
     const maxMessages = 10;
     const startX = 20;
     const startY = 20;
-    const lineHeight = 22;
-    const maxWidth = 400;
+    const lineHeight = 24;
+    const maxWidth = 350;
+    const padding = 8;
+
+    const visible = chatMessages.slice(-maxMessages);
+    if (visible.length === 0) return;
+
+    const height = visible.length * lineHeight + padding * 2;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(startX - padding, startY - padding, maxWidth, height);
+    ctx.restore();
 
     ctx.save();
     ctx.font = '14px Arial';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
-    // Показываем только последние maxMessages сообщений
-    const visible = chatMessages.slice(-maxMessages);
     for (let i = 0; i < visible.length; i++) {
         const msg = visible[i];
         const y = startY + i * lineHeight;
         const prefix = msg.mine ? 'You: ' : (msg.username + ': ');
         const fullText = prefix + msg.text;
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.fillRect(startX - 5, y - 2, Math.min(ctx.measureText(fullText).width + 10, maxWidth), lineHeight);
         ctx.fillStyle = msg.mine ? '#4ecdc4' : '#fff';
-        ctx.fillText(fullText, startX, y);
+        const displayText = fullText.length > 40 ? fullText.slice(0, 40) + '...' : fullText;
+        ctx.fillText(displayText, startX, y);
     }
 
     ctx.restore();
@@ -557,7 +548,6 @@ function render() {
     player.draw(ctx, SCALE);
     if (player.drawEffects) player.drawEffects(ctx, SCALE);
 
-    // === ДРУГИЕ ИГРОКИ ===
     for (const id in otherPlayers) {
         const p = otherPlayers[id];
         if (p.targetX !== undefined) {
@@ -584,7 +574,7 @@ function render() {
         ctx.globalAlpha = 1;
     }
 
-    // === ПОРТАЛЫ ===
+    // Портал
     if (currentMapIndex === 0 && level.levelNumber === 1) {
         const portalX = offsetX;
         const portalY = offsetY;
@@ -761,7 +751,6 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
 window.onload = function() {
-    // Показываем меню только если пользователь авторизован
     const saved = localStorage.getItem('evades_user');
     if (saved) {
         showHeroMenu();
