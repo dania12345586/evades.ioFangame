@@ -117,17 +117,20 @@ async function initMultiplayer(heroName) {
     try {
         // 1. Создаём игрока
         const playerData = await createPlayer('Player', heroName);
+        if (!playerData) {
+            console.error('Failed to create player');
+            return;
+        }
         myPlayerId = playerData.id;
         console.log('Player created:', myPlayerId);
 
-        // 2. Создаём комнату (или присоединяемся к существующей)
-        const room = await createRoom('Room1');
-        myRoomId = room.id;
-        console.log('Room created:', myRoomId);
+        // 2. Используем фиксированную комнату
+        const roomId = '00000000-0000-0000-0000-000000000001';
+        myRoomId = roomId;
 
         // 3. Входим в комнату
         await joinRoom(myPlayerId, myRoomId);
-        console.log('Joined room');
+        console.log('Joined room:', myRoomId);
 
         // 4. Подписываемся на обновления других игроков
         subscribeToRoom(myRoomId, myPlayerId, (id, x, y, hp, isAlive) => {
@@ -140,8 +143,6 @@ async function initMultiplayer(heroName) {
                 otherPlayers[id].isAlive = isAlive;
             }
         });
-
-        // 5. Подписываемся на чат (опционально, потом добавим)
     } catch (error) {
         console.error('Multiplayer init error:', error);
     }
@@ -190,7 +191,6 @@ function switchMap(newMapIndex) {
         newPlayer.portalCooldown = player.portalCooldown;
         newPlayer.portalActive = player.portalActive;
     }
-    // Сброс мультиплеерных данных (они уже есть)
     player = newPlayer;
     player.respawn(105, level.mapHeight / 2);
     
