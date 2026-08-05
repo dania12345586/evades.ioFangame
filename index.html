@@ -13,7 +13,7 @@
         <div style="background: #1a1a2e; padding: 40px; border-radius: 20px; width: 320px; box-shadow: 0 0 40px rgba(0,0,0,0.8); text-align: center;">
             <h1 style="color: #fff; font-family: Arial; margin-bottom: 30px;">Evades.io</h1>
             <div id="authForm">
-                <input type="email" id="emailInput" placeholder="Email" style="width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; background: #2a2a3a; color: #fff; font-size: 16px;" />
+                <input type="text" id="usernameInput" placeholder="Username (логин)" style="width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; background: #2a2a3a; color: #fff; font-size: 16px;" />
                 <input type="password" id="passwordInput" placeholder="Password" style="width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #333; background: #2a2a3a; color: #fff; font-size: 16px;" />
                 <button id="signInBtn" style="width: 100%; padding: 12px; background: #4ecdc4; border: none; border-radius: 8px; color: #fff; font-size: 18px; cursor: pointer; margin-bottom: 10px;">Войти</button>
                 <button id="signUpBtn" style="width: 100%; padding: 12px; background: #22193A; border: 1px solid #4ecdc4; border-radius: 8px; color: #fff; font-size: 18px; cursor: pointer;">Зарегистрироваться</button>
@@ -73,18 +73,18 @@
             const userNameDisplay = document.getElementById('userNameDisplay');
             const authMessage = document.getElementById('authMessage');
 
-            const emailInput = document.getElementById('emailInput');
+            const usernameInput = document.getElementById('usernameInput');
             const passwordInput = document.getElementById('passwordInput');
             const signInBtn = document.getElementById('signInBtn');
             const signUpBtn = document.getElementById('signUpBtn');
             const logoutBtn = document.getElementById('logoutBtn');
 
-            // Проверяем, есть ли уже сессия
+            // Проверяем сессию
             const session = await getSession();
             if (session && session.user) {
                 authForm.style.display = 'none';
                 authLogout.style.display = 'block';
-                userNameDisplay.textContent = session.user.email;
+                userNameDisplay.textContent = session.user.email.split('@')[0]; // показываем только имя
                 authContainer.style.display = 'none';
                 showHeroMenu();
             } else {
@@ -93,37 +93,43 @@
 
             // Регистрация
             signUpBtn.addEventListener('click', async () => {
-                const email = emailInput.value.trim();
+                const username = usernameInput.value.trim();
                 const password = passwordInput.value.trim();
-                if (!email || !password) {
+                if (!username || !password) {
                     authMessage.textContent = 'Заполните все поля';
                     return;
                 }
+                if (username.length > 16 || password.length > 16) {
+                    authMessage.textContent = 'Максимум 16 символов';
+                    return;
+                }
+                const email = username + '@evades.io';
                 const data = await signUp(email, password);
                 if (data && data.user) {
                     authMessage.style.color = '#4ecdc4';
                     authMessage.textContent = 'Регистрация успешна! Теперь войдите.';
                 } else {
                     authMessage.style.color = '#ff6b6b';
-                    authMessage.textContent = 'Ошибка регистрации. Попробуйте другой email.';
+                    authMessage.textContent = 'Ошибка регистрации. Возможно, имя занято.';
                 }
             });
 
             // Вход
             signInBtn.addEventListener('click', async () => {
-                const email = emailInput.value.trim();
+                const username = usernameInput.value.trim();
                 const password = passwordInput.value.trim();
-                if (!email || !password) {
+                if (!username || !password) {
                     authMessage.textContent = 'Заполните все поля';
                     return;
                 }
+                const email = username + '@evades.io';
                 const data = await signIn(email, password);
                 if (data && data.session) {
                     authMessage.textContent = '';
                     authContainer.style.display = 'none';
                     authForm.style.display = 'none';
                     authLogout.style.display = 'block';
-                    userNameDisplay.textContent = data.session.user.email;
+                    userNameDisplay.textContent = username;
                     showHeroMenu();
                 } else {
                     authMessage.style.color = '#ff6b6b';
