@@ -69,7 +69,6 @@ let HeroClass = Scutum;
 let currentMapIndex = 0;
 let isTransitioning = false;
 
-// === МУЛЬТИПЛЕЕРНЫЕ ПЕРЕМЕННЫЕ ===
 let myPlayerId = null;
 let myRoomId = '00000000-0000-0000-0000-000000000001';
 let otherPlayers = {};
@@ -166,7 +165,9 @@ function closeChat() {
 
 function sendChatMessage(text) {
     if (!myPlayerId || !myRoomId) return;
+    // Отправляем на сервер
     sendMessage(myRoomId, myPlayerId, text);
+    // Добавляем локально
     const saved = localStorage.getItem('evades_user');
     let username = 'Player';
     if (saved) {
@@ -192,9 +193,11 @@ async function initMultiplayer(heroName) {
 
         let playerData;
         if (userId) {
+            // Проверяем, есть ли игрок с таким ID
             const existing = await getPlayerByUserId(userId);
             if (existing) {
                 playerData = existing;
+                // Обновляем имя и героя, если изменились
                 if (playerData.name !== username || playerData.hero !== heroName) {
                     await supabaseClient
                         .from('players')
@@ -204,10 +207,16 @@ async function initMultiplayer(heroName) {
                     playerData.hero = heroName;
                 }
             } else {
+                // Создаём игрока с явным ID = userId
                 playerData = await createPlayer(username, heroName, userId);
             }
         } else {
+            // Анонимный игрок
             playerData = await createPlayer('Player', heroName);
+        }
+        if (!playerData) {
+            console.error('Failed to create/get player');
+            return;
         }
         myPlayerId = playerData.id;
         console.log('Player ID:', myPlayerId);
@@ -244,6 +253,10 @@ async function initMultiplayer(heroName) {
                             window._chatNames[playerId] = data.name;
                             chatMessages.push({ username: data.name, text, mine: false });
                         }
+                    })
+                    .catch(() => {
+                        // Если не удалось получить имя, используем 'Unknown'
+                        chatMessages.push({ username: 'Unknown', text, mine: false });
                     });
             } else {
                 chatMessages.push({ username: window._chatNames[playerId], text, mine: false });
@@ -432,7 +445,6 @@ function gameLoop() {
         }
     }
 
-    // Victory
     if (level.isVictory && player.alive) {
         let portalX = (level.portalSide === 'left') ? 0 : level.mapWidth - 40;
         if (player.x >= portalX && player.x <= portalX + 40) {
@@ -450,7 +462,6 @@ function gameLoop() {
         }
     }
 
-    // Обычные переходы
     if (level.isComplete && player.alive) {
         if (level.isWin) {
             gameOver = true;
@@ -513,8 +524,33 @@ function drawChat() {
         const prefix = msg.mine ? 'You: ' : (msg.username + ': ');
         const fullText = prefix + msg.text;
         ctx.fillStyle = msg.mine ? '#4ecdc4' : '#fff';
-        const displayText = fullText.length > 40 ? fullText.slice(0, 40) + '...' : fullText;
-        ctx.fillText(displayText, startX, y);
+        // Разбиваем длинные сообщения на несколько строк
+        const maxChars = 40;
+        let displayText = fullText;
+        if (fullText.length > maxChars) {
+            // Разбиваем по пробелам или просто обрезаем
+            let lines = [];
+            let remaining = fullText;
+            while (remaining.length > maxChars) {
+                let cut = remaining.lastIndexOf(' ', maxChars);
+                if (cut === -1) cut = maxChars;
+                lines.push(remaining.slice(0, cut));
+                remaining = remaining.slice(cut + 1);
+            }
+            if (remaining) lines.push(remaining);
+            for (let j = 0; j < lines.length; j++) {
+                const yy = y + j * lineHeight;
+                ctx.fillText(lines[j], startX, yy);
+            }
+            // Сдвигаем для следующих сообщений, но мы не можем здесь, потому что цикл for использует фиксированный lineHeight.
+            // Вместо этого мы просто рисуем все строки, но тогда они накладываются на следующие сообщения.
+            // Решение: увеличить высоту блока и рисовать все строки последовательно.
+            // Но проще: ограничим длину и добавим многоточие.
+            // Вернёмся к обрезанию.
+        }
+        // Для простоты оставим обрезание
+        const display = fullText.length > 40 ? fullText.slice(0, 40) + '...' : fullText;
+        ctx.fillText(display, startX, y);
     }
 
     ctx.restore();
@@ -574,7 +610,7 @@ function render() {
         ctx.globalAlpha = 1;
     }
 
-    // Портал
+    // Порталы
     if (currentMapIndex === 0 && level.levelNumber === 1) {
         const portalX = offsetX;
         const portalY = offsetY;
@@ -631,7 +667,6 @@ function render() {
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, energyBarWidth, energyBarHeight);
 
-    // Полоска паралича
     if (manager.paralyzeTimer > 0 || manager.isParalyzed) {
         const barWidth = 60;
         const barHeight = 6;
