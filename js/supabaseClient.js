@@ -4,16 +4,17 @@
 const SUPABASE_URL = 'https://oirvrzqlyxgzurpxgjap.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pcnZyenFseXhnenVycHhnamFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTYxNjgsImV4cCI6MjEwMTQ5MjE2OH0.pTLzwDudGv4syhNiUIL8LXzvEl43AE-3mmtXJABYAbM';
 
-// Инициализация клиента (глобально, чтобы использовать везде)
-if (typeof supabase === 'undefined') {
-    var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-} else {
-    console.warn('supabase already defined, using existing instance');
+// Инициализация клиента (используем window.supabase, если он уже есть, иначе создаём)
+if (!window.supabaseClient) {
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    window.supabaseClient = supabaseClient;
 }
 
-// === ФУНКЦИИ ДЛЯ МУЛЬТИПЛЕЕРА (глобальные) ===
+// === ФУНКЦИИ ДЛЯ МУЛЬТИПЛЕЕРА ===
 
+// 1. Создать игрока
 window.createPlayer = async function(name, heroClass) {
+    const supabase = window.supabaseClient;
     const { data, error } = await supabase
         .from('players')
         .insert({ name: name, hero: heroClass })
@@ -23,7 +24,9 @@ window.createPlayer = async function(name, heroClass) {
     return data;
 };
 
+// 2. Создать комнату
 window.createRoom = async function(roomName) {
+    const supabase = window.supabaseClient;
     const { data, error } = await supabase
         .from('rooms')
         .insert({ name: roomName, max_players: 10 })
@@ -33,7 +36,9 @@ window.createRoom = async function(roomName) {
     return data;
 };
 
+// 3. Войти в комнату
 window.joinRoom = async function(playerId, roomId) {
+    const supabase = window.supabaseClient;
     const { data, error } = await supabase
         .from('player_state')
         .insert({
@@ -49,13 +54,15 @@ window.joinRoom = async function(playerId, roomId) {
     return data;
 };
 
-let lastSyncTime = 0;
+// 4. Синхронизация позиции (не чаще 10 раз/сек)
+window._lastSyncTime = 0;
 const SYNC_INTERVAL = 0.1;
 
 window.syncPosition = async function(playerId, x, y, hp, energy, isAlive) {
+    const supabase = window.supabaseClient;
     const now = performance.now() / 1000;
-    if (now - lastSyncTime < SYNC_INTERVAL) return;
-    lastSyncTime = now;
+    if (now - window._lastSyncTime < SYNC_INTERVAL) return;
+    window._lastSyncTime = now;
 
     const { error } = await supabase
         .from('player_state')
@@ -71,7 +78,9 @@ window.syncPosition = async function(playerId, x, y, hp, energy, isAlive) {
     if (error) console.error('Error syncing position:', error);
 };
 
+// 5. Подписка на других игроков в комнате
 window.subscribeToRoom = function(roomId, myPlayerId, onUpdate) {
+    const supabase = window.supabaseClient;
     const channel = supabase.channel(`room:${roomId}`);
 
     channel.on(
@@ -91,7 +100,9 @@ window.subscribeToRoom = function(roomId, myPlayerId, onUpdate) {
     return channel;
 };
 
+// 6. Отправить сообщение в чат
 window.sendMessage = async function(roomId, playerId, text) {
+    const supabase = window.supabaseClient;
     const { error } = await supabase
         .from('messages')
         .insert({
@@ -102,7 +113,9 @@ window.sendMessage = async function(roomId, playerId, text) {
     if (error) console.error('Error sending message:', error);
 };
 
+// 7. Подписка на сообщения чата
 window.subscribeToChat = function(roomId, onMessage) {
+    const supabase = window.supabaseClient;
     const channel = supabase.channel(`chat:${roomId}`);
 
     channel.on(
@@ -120,3 +133,5 @@ window.subscribeToChat = function(roomId, onMessage) {
 
     return channel;
 };
+
+console.log('Supabase client ready');
