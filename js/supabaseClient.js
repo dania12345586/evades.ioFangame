@@ -3,10 +3,7 @@
 const SUPABASE_URL = 'https://oirvrzqlyxgzurpxgjap.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pcnZyenFseXhnenVycHhnamFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTYxNjgsImV4cCI6MjEwMTQ5MjE2OH0.pTLzwDudGv4syhNiUIL8LXzvEl43AE-3mmtXJABYAbM';
 
-// Используем другое имя, чтобы не конфликтовать
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// ---- ФУНКЦИИ ----
 
 async function createPlayer(name, heroClass) {
   const { data, error } = await supabaseClient
@@ -26,6 +23,25 @@ async function createRoom(roomName) {
     .single();
   if (error) console.error('Error creating room:', error);
   return data;
+}
+
+async function getOrCreateRoom(roomId, roomName, maxPlayers) {
+  // Проверяем, существует ли комната
+  const { data, error } = await supabaseClient
+    .from('rooms')
+    .select('*')
+    .eq('id', roomId)
+    .maybeSingle();
+  if (error) throw error;
+  if (data) return data;
+  // Если нет, создаём
+  const { data: newRoom, error: createError } = await supabaseClient
+    .from('rooms')
+    .insert({ id: roomId, name: roomName, max_players: maxPlayers })
+    .select()
+    .single();
+  if (createError) throw createError;
+  return newRoom;
 }
 
 async function joinRoom(playerId, roomId) {
@@ -116,9 +132,9 @@ function subscribeToChat(roomId, onMessage) {
   return channel;
 }
 
-// ---- ДЕЛАЕМ ФУНКЦИИ ДОСТУПНЫМИ ГЛОБАЛЬНО ----
 window.createPlayer = createPlayer;
 window.createRoom = createRoom;
+window.getOrCreateRoom = getOrCreateRoom;
 window.joinRoom = joinRoom;
 window.syncPosition = syncPosition;
 window.subscribeToRoom = subscribeToRoom;
