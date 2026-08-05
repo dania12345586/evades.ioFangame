@@ -1,40 +1,40 @@
 // js/supabaseClient.js
 
-// Используем глобальный объект supabase из CDN (если он уже есть)
-// Если нет, создаём новый клиент
-if (typeof window.supabase === 'undefined') {
-    console.error('Supabase client not loaded from CDN!');
-}
-
+// === НАСТРОЙКА ПОДКЛЮЧЕНИЯ ===
 const SUPABASE_URL = 'https://oirvrzqlyxgzurpxgjap.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pcnZyenFseXhnenVycHhnamFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MTYxNjgsImV4cCI6MjEwMTQ5MjE2OH0.pTLzwDudGv4syhNiUIL8LXzvEl43AE-3mmtXJABYAbM';
 
-// Если CDN уже создал supabase, используем его; иначе создаём
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Инициализация клиента (глобально, чтобы использовать везде)
+if (typeof supabase === 'undefined') {
+    var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} else {
+    console.warn('supabase already defined, using existing instance');
+}
 
-// Экспортируем функции, используя supabaseClient
-async function createPlayer(name, heroClass) {
-    const { data, error } = await supabaseClient
+// === ФУНКЦИИ ДЛЯ МУЛЬТИПЛЕЕРА (глобальные) ===
+
+window.createPlayer = async function(name, heroClass) {
+    const { data, error } = await supabase
         .from('players')
         .insert({ name: name, hero: heroClass })
         .select()
         .single();
     if (error) console.error('Error creating player:', error);
     return data;
-}
+};
 
-async function createRoom(roomName) {
-    const { data, error } = await supabaseClient
+window.createRoom = async function(roomName) {
+    const { data, error } = await supabase
         .from('rooms')
         .insert({ name: roomName, max_players: 10 })
         .select()
         .single();
     if (error) console.error('Error creating room:', error);
     return data;
-}
+};
 
-async function joinRoom(playerId, roomId) {
-    const { data, error } = await supabaseClient
+window.joinRoom = async function(playerId, roomId) {
+    const { data, error } = await supabase
         .from('player_state')
         .insert({
             player_id: playerId,
@@ -47,17 +47,17 @@ async function joinRoom(playerId, roomId) {
         });
     if (error) console.error('Error joining room:', error);
     return data;
-}
+};
 
 let lastSyncTime = 0;
 const SYNC_INTERVAL = 0.1;
 
-async function syncPosition(playerId, x, y, hp, energy, isAlive) {
+window.syncPosition = async function(playerId, x, y, hp, energy, isAlive) {
     const now = performance.now() / 1000;
     if (now - lastSyncTime < SYNC_INTERVAL) return;
     lastSyncTime = now;
 
-    const { error } = await supabaseClient
+    const { error } = await supabase
         .from('player_state')
         .update({
             x: x,
@@ -69,10 +69,10 @@ async function syncPosition(playerId, x, y, hp, energy, isAlive) {
         })
         .eq('player_id', playerId);
     if (error) console.error('Error syncing position:', error);
-}
+};
 
-function subscribeToRoom(roomId, myPlayerId, onUpdate) {
-    const channel = supabaseClient.channel(`room:${roomId}`);
+window.subscribeToRoom = function(roomId, myPlayerId, onUpdate) {
+    const channel = supabase.channel(`room:${roomId}`);
 
     channel.on(
         'postgres_changes',
@@ -89,10 +89,10 @@ function subscribeToRoom(roomId, myPlayerId, onUpdate) {
     ).subscribe();
 
     return channel;
-}
+};
 
-async function sendMessage(roomId, playerId, text) {
-    const { error } = await supabaseClient
+window.sendMessage = async function(roomId, playerId, text) {
+    const { error } = await supabase
         .from('messages')
         .insert({
             room_id: roomId,
@@ -100,10 +100,10 @@ async function sendMessage(roomId, playerId, text) {
             text: text
         });
     if (error) console.error('Error sending message:', error);
-}
+};
 
-function subscribeToChat(roomId, onMessage) {
-    const channel = supabaseClient.channel(`chat:${roomId}`);
+window.subscribeToChat = function(roomId, onMessage) {
+    const channel = supabase.channel(`chat:${roomId}`);
 
     channel.on(
         'postgres_changes',
@@ -119,13 +119,4 @@ function subscribeToChat(roomId, onMessage) {
     ).subscribe();
 
     return channel;
-}
-
-// Делаем функции глобальными для использования в Game.js
-window.createPlayer = createPlayer;
-window.createRoom = createRoom;
-window.joinRoom = joinRoom;
-window.syncPosition = syncPosition;
-window.subscribeToRoom = subscribeToRoom;
-window.sendMessage = sendMessage;
-window.subscribeToChat = subscribeToChat;
+};
